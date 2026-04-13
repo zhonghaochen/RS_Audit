@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>自然资源资产智能审计平台</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-dark: #090e17; --panel-bg: rgba(21, 30, 45, 0.85); --border-color: #1e293b;
+            --text-main: #e2e8f0; --text-muted: #94a3b8;
+            --theme-forest: #10b981; --theme-water: #3b82f6; --theme-land: #f59e0b; --theme-mine: #f97316;
+            --danger: #ef4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, transparent 60%); }
+        
+        /* 顶部导航 - 核心重构 */
+        .header { height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid var(--border-color); backdrop-filter: blur(10px); }
+        .logo { font-size: 22px; font-weight: bold; display: flex; align-items: center; gap: 10px; letter-spacing: 1px; }
+        .nav-tabs { display: flex; gap: 15px; background: rgba(0,0,0,0.3); padding: 5px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .tab-btn { padding: 10px 25px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: 500; transition: all 0.3s; color: var(--text-muted); border: 1px solid transparent; }
+        
+        /* 四个主题的激活状态 */
+        .tab-btn[data-target="forest"].active { background: rgba(16, 185, 129, 0.15); border-color: var(--theme-forest); color: var(--theme-forest); text-shadow: 0 0 10px rgba(16,185,129,0.5); }
+        .tab-btn[data-target="water"].active { background: rgba(59, 130, 246, 0.15); border-color: var(--theme-water); color: var(--theme-water); text-shadow: 0 0 10px rgba(59,130,246,0.5); }
+        .tab-btn[data-target="land"].active { background: rgba(245, 158, 11, 0.15); border-color: var(--theme-land); color: var(--theme-land); text-shadow: 0 0 10px rgba(245,158,11,0.5); }
+        .tab-btn[data-target="mine"].active { background: rgba(249, 115, 22, 0.15); border-color: var(--theme-mine); color: var(--theme-mine); text-shadow: 0 0 10px rgba(249,115,22,0.5); }
+
+        /* 主体布局：上下分布 */
+        .content-area { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 20px; }
+        
+        /* 上半部分：地图 + KPI看板 */
+        .top-section { display: flex; gap: 20px; height: 55%; }
+        .map-wrapper { flex: 3; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        #mapView { width: 100%; height: 100%; z-index: 1;}
+        .kpi-wrapper { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+        .kpi-card { flex: 1; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden;}
+        .kpi-title { font-size: 15px; color: var(--text-muted); margin-bottom: 10px; }
+        .kpi-value { font-size: 32px; font-weight: bold; color: #fff; }
+        .kpi-unit { font-size: 14px; color: var(--text-muted); margin-left: 5px; }
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; }
+        
+        /* 下半部分：图表 + 台账 */
+        .bottom-section { display: flex; gap: 20px; height: 45%; }
+        .panel { flex: 1; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; }
+        .panel-title { font-size: 16px; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .panel-title::before { content: ''; display: block; width: 4px; height: 16px; border-radius: 2px; }
+        
+        #chartView { flex: 1; width: 100%; }
+        
+        /* 表格样式美化 */
+        .table-container { flex: 1; overflow-y: auto; padding-right: 5px;}
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { position: sticky; top: 0; background: #1a2235; padding: 12px 10px; text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--border-color); z-index: 2; }
+        td { padding: 12px 10px; border-bottom: 1px solid rgba(30, 41, 59, 0.5); }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        .tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="logo">🌏 智能审计学院 · 自然资源遥感审计平台</div>
+        <div class="nav-tabs" id="navTabs">
+            <div class="tab-btn active" data-target="forest">🌲 森林资源审计</div>
+            <div class="tab-btn" data-target="water">💧 水资源审计</div>
+            <div class="tab-btn" data-target="land">🌾 土地资源审计</div>
+            <div class="tab-btn" data-target="mine">⛏️ 矿产资源审计</div>
+        </div>
+    </div>
+
+    <div class="content-area">
+        <!-- 上半部分 -->
+        <div class="top-section">
+            <div class="map-wrapper">
+                <div id="mapView"></div>
+            </div>
+            <div class="kpi-wrapper" id="kpiBoard">
+                <!-- KPI 将通过 JS 动态渲染 -->
+            </div>
+        </div>
+
+        <!-- 下半部分 -->
+        <div class="bottom-section">
+            <div class="panel">
+                <div class="panel-title" id="chartTitle">遥感监测时序分析</div>
+                <div id="chartView"></div>
+            </div>
+            <div class="panel">
+                <div class="panel-title" id="tableTitle" style="color:var(--danger)">审计疑点线索台账</div>
+                <div class="table-container">
+                    <table id="auditTable">
+                        <thead>
+                            <tr id="tableHead"></tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 全局配置与数据源 (模拟4个不同业务场景的数据)
+        // ==========================================
+        const auditData = {
+            forest: {
+                themeColor: '#10b981', mapCenter: [29.5, 118.0], mapZoom: 10,
+                kpi: [
+                    { title: "区域森林覆盖率", value: "68.5", unit: "%", border: "#10b981" },
+                    { title: "疑似非法滥伐面积", value: "124.3", unit: "公顷", border: "#ef4444" },
+                    { title: "退耕还林资金异常", value: "89.5", unit: "万元", border: "#f59e0b" }
+                ],
+                chart: {
+                    title: "近五年退耕还林规划与实际成效对比",
+                    option: {
+                        tooltip: { trigger: 'axis' }, legend: { textStyle:{color:'#94a3b8'} }, grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                        xAxis: { type: 'category', data: ['2019', '2020', '2021', '2022', '2023'] },
+                        yAxis: { type: 'value', name: '面积(公顷)' },
+                        series: [
+                            { name: '规划造林面积', type: 'bar', data: [500, 600, 550, 700, 650], itemStyle: {color: '#34d399'} },
+                            { name: '遥感核实面积', type: 'line', data: [480, 420, 500, 510, 640], itemStyle: {color: '#ef4444'}, symbolSize: 8 } // 20-22年明显有差额
+                        ]
+                    }
+                },
+                table: {
+                    headers: ['地块编号', '行政区划', '现状地类', '疑点类型', '涉及面积(亩)', '状态'],
+                    rows: [
+                        ['F-2023-01', 'A县青云镇', '裸地', '毁林开垦', '45.2', '重点核查'],
+                        ['F-2023-02', 'B县长林乡', '经济林', '套取造林补贴', '120.0', '重点核查'],
+                        ['F-2023-03', 'A县东峰村', '建筑工地', '非法占用林地', '12.5', '已立案']
+                    ]
+                }
+            },
+            water: {
+                themeColor: '#3b82f6', mapCenter: [31.2, 120.2], mapZoom: 11,
+                kpi: [
+                    { title: "核心湖泊面积变化", value: "-2.4", unit: "km²", border: "#ef4444" },
+                    { title: "劣V类水质河段", value: "3", unit: "处", border: "#f59e0b" },
+                    { title: "黑臭水体治理达标率", value: "78.2", unit: "%", border: "#3b82f6" }
+                ],
+                chart: {
+                    title: "沿江排污口总磷浓度反演监测",
+                    option: {
+                        tooltip: { trigger: 'axis' }, grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                        xAxis: { type: 'category', data: ['排污口1', '排污口2', '排污口3', '排污口4', '排污口5'] },
+                        yAxis: { type: 'value', name: '浓度(mg/L)', max: 2.0 },
+                        visualMap: { top: 10, right: 10, pieces: [{gt: 0, lte: 0.2, color: '#3b82f6'}, {gt: 0.2, lte: 0.4, color: '#f59e0b'}, {gt: 0.4, color: '#ef4444'}], outOfRange: {color: '#999'} },
+                        series: [{ name: '总磷浓度', type: 'line', data: [0.15, 0.18, 0.65, 0.25, 0.82], markLine: { data: [{yAxis: 0.4, name: '超标线'}] } }]
+                    }
+                },
+                table: {
+                    headers: ['河湖名称', '监测点位', '污染指标', '异常时间', '排污归属企业', '核查建议'],
+                    rows: [
+                        ['太浦河', 'TP-01段', '富营养化/蓝藻', '2023-08', '未知(暗管排污)', '现场取证'],
+                        ['阳澄湖', 'YC-东侧', '总磷超标', '2023-09', '某化工园区', '资金追溯'],
+                        ['大运河', 'DY-04段', '黑臭水体', '2023-10', '市政管网漏损', '督办修复']
+                    ]
+                }
+            },
+            land: {
+                themeColor: '#f59e0b', mapCenter: [34.5, 113.0], mapZoom: 10,
+                kpi: [
+                    { title: "基本农田划定面积", value: "8.5", unit: "万亩", border: "#10b981" },
+                    { title: "违规非农化占用", value: "450", unit: "亩", border: "#ef4444" },
+                    { title: "违规非粮化种植", value: "1200", unit: "亩", border: "#f59e0b" }
+                ],
+                chart: {
+                    title: "耕地违法占用类型占比",
+                    option: {
+                        tooltip: { trigger: 'item' }, legend: { top: 'bottom', textStyle:{color:'#ccc'} },
+                        series: [{ type: 'pie', radius: ['40%', '70%'], itemStyle: { borderRadius: 10, borderColor: '#1e293b', borderWidth: 2 },
+                            data: [ {value: 300, name: '建房/厂房'}, {value: 100, name: '挖塘养鱼'}, {value: 50, name: '植树造林'}, {value: 1200, name: '改种经济作物(非粮)'} ]
+                        }]
+                    }
+                },
+                table: {
+                    headers: ['图斑编号', '位置坐标', '原规划用途', '遥感识别现状', '面积(亩)', '审计定性'],
+                    rows: [
+                        ['L-001', '34.52°N, 113.01°E', '基本农田', '彩钢瓦厂房', '15.6', '非法圈地'],
+                        ['L-002', '34.55°N, 113.05°E', '高标准农田', '大面积果园', '120.0', '非粮化违规'],
+                        ['L-003', '34.48°N, 112.98°E', '一般耕地', '硬化路面/停车场', '8.5', '非法硬化']
+                    ]
+                }
+            },
+            mine: {
+                themeColor: '#f97316', mapCenter: [37.5, 110.0], mapZoom: 12,
+                kpi: [
+                    { title: "在册矿权数量", value: "12", unit: "个", border: "#f97316" },
+                    { title: "越界开采嫌疑", value: "2", unit: "处", border: "#ef4444" },
+                    { title: "生态修复延期", value: "45", unit: "公顷", border: "#f59e0b" }
+                ],
+                chart: {
+                    title: "废弃矿山生态修复工程资金与进度跟踪",
+                    option: {
+                        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } }, legend: { textStyle:{color:'#ccc'} }, grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                        xAxis: { type: 'value', axisLabel:{color:'#ccc'} }, yAxis: { type: 'category', data: ['A矿区修复', 'B矿区修复', 'C矿区修复'], axisLabel:{color:'#ccc'} },
+                        series: [
+                            { name: '财务已拨付资金(%)', type: 'bar', data: [90, 80, 100], itemStyle: {color: '#f97316'} },
+                            { name: '遥感核实复绿率(%)', type: 'bar', data: [45, 75, 20], itemStyle: {color: '#10b981'} } // C矿区钱拨了100%，复绿只有20%，重大审计线索
+                        ]
+                    }
+                },
+                table: {
+                    headers: ['矿山名称', '许可证范围', '高光谱识别范围', '环境破坏评估', '修复资金进度', '风险预警'],
+                    rows: [
+                        ['东沟煤矿', '1.2 km²', '1.8 km²', '越界引发山体滑坡隐患', '拨款正常', '重大违法'],
+                        ['西山石料厂', '0.5 km²', '0.5 km²', '粉尘污染超标', '拨款正常', '环保违规'],
+                        ['北坡废弃矿', '停产需修复', '裸露荒地无植被', '复绿完全停滞', '已全额拨付', '套取资金嫌疑']
+                    ]
+                }
+            }
+        };
+
+        // ==========================================
+        // 初始化地图与图表实例
+        // ==========================================
+        const map = L.map('mapView', { zoomControl: false, attributionControl: false }).setView([29.5, 118.0], 10);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+        
+        let myChart = echarts.init(document.getElementById('chartView'));
+
+        // ==========================================
+        // 核心逻辑：渲染不同域的数据
+        // ==========================================
+        function renderView(domain) {
+            const data = auditData[domain];
+            
+            // 1. 更新主色调
+            document.documentElement.style.setProperty('--text-main', data.themeColor);
+            document.querySelectorAll('.panel-title::before').forEach(el => el.style.backgroundColor = data.themeColor);
+
+            // 2. 更新 KPI 面板
+            const kpiHtml = data.kpi.map(k => `
+                <div class="kpi-card" style="border-left-color: ${k.border};">
+                    <div class="kpi-title">${k.title}</div>
+                    <div><span class="kpi-value" style="color: ${k.border}">${k.value}</span><span class="kpi-unit">${k.unit}</span></div>
+                </div>
+            `).join('');
+            document.getElementById('kpiBoard').innerHTML = kpiHtml;
+
+            // 3. 更新地图中心 (真实应用中这里会重新加载不同的图层、GeoJSON边界等)
+            map.flyTo(data.mapCenter, data.mapZoom, { duration: 1.5 });
+
+            // 4. 更新 ECharts
+            document.getElementById('chartTitle').innerHTML = `时序与财务数据智能比对分析 - <span style="color:${data.themeColor};font-size:14px">${data.chart.title}</span>`;
+            myChart.clear(); // 清空历史
+            myChart.setOption({
+                backgroundColor: 'transparent',
+                textStyle: { color: '#94a3b8' },
+                ...data.chart.option
+            });
+
+            // 5. 更新台账表格
+            const theadHtml = data.table.headers.map(h => `<th>${h}</th>`).join('');
+            document.getElementById('tableHead').innerHTML = theadHtml;
+            
+            const tbodyHtml = data.table.rows.map(row => {
+                let tr = '<tr>';
+                row.forEach((cell, i) => {
+                    if (i === row.length - 1) { // 最后一列加 Tag 样式
+                        tr += `<td><span class="tag">${cell}</span></td>`;
+                    } else {
+                        tr += `<td>${cell}</td>`;
+                    }
+                });
+                tr += '</tr>';
+                return tr;
+            }).join('');
+            document.getElementById('tableBody').innerHTML = tbodyHtml;
+        }
+
+        // ==========================================
+        // 绑定导航栏点击事件
+        // ==========================================
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // 移除所有 active
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                // 当前按钮添加 active
+                const targetBtn = e.target;
+                targetBtn.classList.add('active');
+                
+                // 渲染对应视图
+                renderView(targetBtn.getAttribute('data-target'));
+            });
+        });
+
+        // 窗口缩放适配图表
+        window.addEventListener('resize', () => myChart.resize());
+
+        // 首次加载渲染“森林审计”
+        renderView('forest');
+
+    </script>
+</body>
+</html>
+```
