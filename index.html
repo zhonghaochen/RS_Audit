@@ -60,12 +60,29 @@
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        /* 新增：Logo图片的样式控制 */
+        .logo-img {
+            height: 32px;            /* 调整图片高度，使其与文字协调 */
+            width: auto;             /* 宽度自动缩放 */
+            vertical-align: middle;  /* 垂直居中对齐 */
+            margin-right: 12px;      /* 与后面文字的间距 */
+            object-fit: contain;     /* 确保图片不被拉伸 */
+        }
+        /* 确保文字垂直居中 */
+        .logo {
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div class="logo">🌏 NAU 计算机/智能审计学院 · 自然资源遥感审计平台</div>
+        <div class="logo">
+        <!-- 这里换成您的图片 -->
+        <img src="Logo.png" class="logo-img" alt="Logo">
+        <span>NAU 计算机/智能审计学院 · 自然资源遥感审计平台</span>
+    </div>
         <div class="nav-tabs" id="navTabs">
             <div class="tab-btn active" data-target="forest">🌲 森林资源审计</div>
             <div class="tab-btn" data-target="water">💧 水资源审计</div>
